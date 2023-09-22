@@ -8,7 +8,7 @@ from minleaf.leaf_area_zabawa import Surface_Area_Estimation
 output_dir = '/home/karoline/workspace/data/tropo_output/Tomato'
 data_set = 'Tomato' #'Tomato' #'Maize' #'Katrina' #'Zara' #'Zombies'
 use_only_annontated = True
-recompute = [True, False, False, False, False] #[False, False, False, False, False]
+recompute = [False, False, False, False, False] #[False, False, False, False, False]
 
 '''INPUT DATA LOCATIONS'''
 data_locations = {'Tomato': '/home/karoline/workspace/data/Pheno4D',
@@ -24,7 +24,7 @@ tuned_params = {'Tomato': {'ball_pivot': False,
                         'max mesh edge length': 0.75, 
                         'bp_radius':0,
                         'hole closing max edges':30,
-                        'target compression percentage': 0.1, 
+                        'target compression percentage': 0.3, 
                         'max_hull_edge_length': 0.85,
                         'pca_input_n': 500},
                 
@@ -32,7 +32,7 @@ tuned_params = {'Tomato': {'ball_pivot': False,
                         'max mesh edge length': 0.75, 
                         'bp_radius':0,
                         'hole closing max edges':30,
-                        'target compression percentage': 0.1, 
+                        'target compression percentage': 0.3, 
                         'max_hull_edge_length': 0.85,
                         'pca_input_n': 500},
                     
@@ -40,7 +40,7 @@ tuned_params = {'Tomato': {'ball_pivot': False,
                         'max mesh edge length': 0.75, 
                         'bp_radius': 0,
                         'hole closing max edges':30,
-                        'target compression percentage': 0.1, 
+                        'target compression percentage': 0.3, 
                         'max_hull_edge_length': 0.1,
                         'pca_input_n': 500},
 
@@ -48,7 +48,7 @@ tuned_params = {'Tomato': {'ball_pivot': False,
                         'max mesh edge length': 0.75, 
                         'bp_radius': 0,
                         'hole closing max edges':30,
-                        'target compression percentage': 0.1, 
+                        'target compression percentage': 0.3, 
                         'max_hull_edge_length': 0.1,
                         'pca_input_n': 500},
 
@@ -56,7 +56,7 @@ tuned_params = {'Tomato': {'ball_pivot': False,
                         'max mesh edge length': 0.75, 
                         'bp_radius': 0,
                         'hole closing max edges':30,
-                        'target compression percentage': 0.1, 
+                        'target compression percentage': 0.3, 
                         'max_hull_edge_length': 0.1,
                         'pca_input_n': 500},
                 }
@@ -86,7 +86,7 @@ def process_p4d_data(input_dir, output_dir, use_only_annontated, recompute, hype
     for scan in plants:
         cloud, labels, scan_id = p4d.open_file(scan)
         if data_set == 'Maize':
-            labels = labels[:,1] # select the second column of labels
+            labels = labels[:,0] # select the first column of labels
         organs = p4d.split_into_organs(cloud, labels)
         if data_set == 'Tomato':
             leaves = organs[2:]

@@ -1,6 +1,6 @@
 import os
 import numpy as np
-import seaborn as sns
+#import seaborn as sns
 import open3d as o3d
 
 def get_file_locations(input_dir):

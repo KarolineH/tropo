@@ -2,35 +2,69 @@ import pheno4d_util as p4d
 import numpy as np
 from minleaf.process_leaf import Leaf
 import os
+from minleaf.leaf_area_zabawa import Surface_Area_Estimation
 
 '''PARAMETERS'''
-output_dir = '/home/karoline/workspace/data/tropo_output/Maize'
-data_set = 'Maize' #'Tomato' #'Maize' #'Katrina' #'Zara' #'Zombies'
+output_dir = '/home/karoline/workspace/data/tropo_output/Tomato'
+data_set = 'Tomato' #'Tomato' #'Maize' #'Katrina' #'Zara' #'Zombies'
 use_only_annontated = True
-recompute = [False, False, False, False]
-hyperparams = {
-    'ball_pivot': True, 'max mesh edge length': 0.75, 'bp_radii': [0.1,0.15,0.2,0.25,0.3,0.35,0.4],'hole closing max edges':30,
-    'target compression percentage': 0.2, 'max_outline_edge_length': 0
-}
-
+recompute = [False, False, False, False, False] #[False, False, False, False, False]
 
 '''INPUT DATA LOCATIONS'''
-if data_set == 'Tomato' or data_set == 'Maize':
-    input_dir = '/home/karoline/workspace/data/Pheno4D'
-elif data_set == 'Katrina':
-    input_dir = '/home/karoline/workspace/data/EinScan/annotated/Katrina/Katrina2/xyz'
-elif data_set == 'Zara':
-    input_dir = '/home/karoline/workspace/data/EinScan/annotated/Zara/Zara1/xyz'
-elif data_set == 'Zombies':
-    input_dir = '/home/karoline/workspace/data/zombies_raw'
+data_locations = {'Tomato': '/home/karoline/workspace/data/Pheno4D',
+                'Maize': '/home/karoline/workspace/data/Pheno4D',
+                'Katrina': '/home/karoline/workspace/data/EinScan/annotated/Katrina/Katrina2/xyz',
+                'Zara': '/home/karoline/workspace/data/EinScan/annotated/Zara/Zara1/xyz',
+                'Zombies': '/home/karoline/workspace/data/zombies_raw'
+                }
+input_dir = data_locations[data_set]
 
+'''PRE-TUNED PARAMETERS'''
+tuned_params = {'Tomato': {'ball_pivot': False, 
+                        'max mesh edge length': 0.75, 
+                        'bp_radius':0,
+                        'hole closing max edges':30,
+                        'target compression percentage': 0.3, 
+                        'max_hull_edge_length': 0.85,
+                        'pca_input_n': 500},
+                
+                'Maize': {'ball_pivot': False, 
+                        'max mesh edge length': 0.75, 
+                        'bp_radius':0,
+                        'hole closing max edges':30,
+                        'target compression percentage': 0.3, 
+                        'max_hull_edge_length': 0.85,
+                        'pca_input_n': 500},
+                    
+                'Katrina': {'ball_pivot': True, 
+                        'max mesh edge length': 0.75, 
+                        'bp_radius': 0,
+                        'hole closing max edges':30,
+                        'target compression percentage': 0.3, 
+                        'max_hull_edge_length': 0.1,
+                        'pca_input_n': 500},
 
-'''TUNED PARAMETERS'''
-#[0.01,0.1,1,1.2] Strawberry default
+                'Zara': {'ball_pivot': True, 
+                        'max mesh edge length': 0.75, 
+                        'bp_radius': 0,
+                        'hole closing max edges':30,
+                        'target compression percentage': 0.3, 
+                        'max_hull_edge_length': 0.1,
+                        'pca_input_n': 500},
+
+                'Zombies': {'ball_pivot': True,
+                        'max mesh edge length': 0.75, 
+                        'bp_radius': 0,
+                        'hole closing max edges':30,
+                        'target compression percentage': 0.3, 
+                        'max_hull_edge_length': 0.1,
+                        'pca_input_n': 500},
+                }
+hyperparams = tuned_params[data_set]
+
+#[0.01,0.1,1,1.2] Strawberry default 
 #[0.1,0.15,0.2,0.25,0.3,0.35,0.4] Zombie BP meshing
 #[0.06, 0.1, 0.5, 1] Tomato
-# Maize
-
 
 '''CODE'''
 def process_p4d_data(input_dir, output_dir, use_only_annontated, recompute, hyperparams):
@@ -52,7 +86,7 @@ def process_p4d_data(input_dir, output_dir, use_only_annontated, recompute, hype
     for scan in plants:
         cloud, labels, scan_id = p4d.open_file(scan)
         if data_set == 'Maize':
-            labels = labels[:,1] # select the second column of labels
+            labels = labels[:,0] # select the first column of labels
         organs = p4d.split_into_organs(cloud, labels)
         if data_set == 'Tomato':
             leaves = organs[2:]
@@ -76,17 +110,16 @@ def process_p4d_data(input_dir, output_dir, use_only_annontated, recompute, hype
 
         for i,leaf in enumerate(leaves):
             full_id = f"{plant_nr}_{date}_{current_ts}_{leaf_numbers[i]}"
-            print(full_id)
-
             min_leaf = Leaf(leaf[0], full_id, base_dir=output_dir, recompute=recompute, hyperparams=hyperparams)
     return
 
 
 def process_strawb_data(input_dir, output_dir, recompute, hyperparams):
     files = os.listdir(input_dir)
-    for scan in files:
+    files = sorted(files)
+    for i,scan in enumerate(files):
         # This is performed for each individual scan
-        data = np.loadtxt(input_dir + '/' + scan)
+        data = np.loadtxt(input_dir + '/' + scan, comments='//')
         class_cats = {"leaf":1, "petiole":2, "berry":3, "flower":4, "crown":5, "background":6}
         points = []
         colours = []
@@ -108,9 +141,11 @@ def process_strawb_data(input_dir, output_dir, recompute, hyperparams):
             individuals.append(points[ind])
         
         instance_labels = instances.astype(int)
-        for i,leaf in enumerate(individuals):
-            full_id = f"{scan.split('.')[0]}_{instance_labels[i]}"
+        for j,leaf in enumerate(individuals):
+            full_id = f"{scan.split('.')[0]}_{i}_{instance_labels[j]}"
             min_leaf = Leaf(leaf, full_id, base_dir=output_dir, recompute=recompute, hyperparams=hyperparams)
+
+            #leaf_area, mesh = Surface_Area_Estimation(leaf.points, nn = 5, std_dev_ratio = 1.0, target_density = 400, scaling = [0.1,1,5], hull_param = 0.85, close_holes = False, hole_size=0) # tuned parameters for this Strawberry set
     return
 
 def process_zombie_data(input_dir, output_dir, recompute, hyperparams):

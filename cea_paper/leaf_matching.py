@@ -16,6 +16,12 @@ def get_centroids(directory):
     centroids = logs[:,0:3, 3]
     return centroids
 
+# def get_features(directory):
+
+#     PCAH, test_ds, test_labels = leaf_encoding.get_encoding(train_split=train_split, random_split=random_split, directory=directory, standardise=standardise, location=location, rotation=rotation, scale=scale, as_features=as_features)
+
+#     return features
+
 def get_dist_mat(data1, data2, training_set=None, mahalanobis_dist=False):
     '''
     Calculate the pairwise distance matrix between two data sets, using Mahalanobis or euclidean distance, without any compression/encoding.
@@ -28,7 +34,7 @@ def get_dist_mat(data1, data2, training_set=None, mahalanobis_dist=False):
     else:
         # if only 1 feature is given, we use the Euclidean distance. It is directly proportional to the mahalanobis distance for a single variable.
         # same if no training set is given
-        print('Using Euclidean distance')
+        #print('Using Euclidean distance')
         dist = cdist(data1, data2, 'euclidean')
     return dist
 
@@ -36,17 +42,27 @@ def compute_assignment(dist_mat, label_set_1, label_set_2):
     '''
     Uses the Hungarian method or Munkres algorithm to find the best assignment or minimum weight matching, given a cost matrix.
     '''
-    assignment = linear_sum_assignment(dist_mat)
-    match = (label_set_1[assignment[0]], label_set_2[assignment[1]])
-    return assignment, match, np.array(list(zip(match[0],match[1])))
+    assignment_idxs = np.asarray(linear_sum_assignment(dist_mat)) # Hungarian method, assignment given in indeces
+    assignment_labels = (label_set_1[assignment_idxs[0,:]], label_set_2[assignment_idxs[1,:]])
+    prediction = np.array(list(zip(assignment_labels[0],assignment_labels[1])))[:,:,-1]
+    return assignment_idxs, prediction
 
-def get_prediction(data, labels):
-    #TODO: Add option to remove emerging leaves from evaluation
-    bonn_scores = [[],[],[],[],[],[]] # x, fp, o, dist_x, dist_fp, dist_o
+def get_single_bonn_prediction(before_centroids, after_centroids, before_labels, after_labels, training_set=None, mahalanobis_dist=False):
+    if before_centroids.size == 0 or after_centroids.size == 0:
+        print('One of the provided sets is empty.')
+        return
+    centroid_dist = get_dist_mat(before_centroids, after_centroids, training_set, mahalanobis_dist=mahalanobis_dist)
+    assignments, prediction = compute_assignment(centroid_dist, before_labels, after_labels)
+    return prediction
+
+def get_bonn_scores(data, labels):
+    #TODO: Add option to remove leaves from evaluation that are only present in the after set
+
+    scores = [[],[],[],[],[],[]] # x, fp, o, dist_x, dist_fp, dist_o
     nr_of_leaves = [] # how many matches were found, dictated by smaller nr of leaves at time t or t+1
     pairings_calculated = [] # number of pairings that were found, regardless of correctness, usually equal to the sum of the min number of leaves at each time step
     total_true_pairings = [] # number of true pairing that could have been found
-    bonn_cost_distr=[[],[]]
+    cost_distr=[[],[]]
 
     for plant in np.unique(labels[:,0]): # for each plant
         subset, sublabels = util.filter_subset(data, labels, plant_nr=plant)
@@ -63,89 +79,152 @@ def get_prediction(data, labels):
                 if c_after.size == 0 or c_before.size == 0:
                     # if any set is empty, there is no comparison to make
                     continue
-
                 centroid_dist = get_dist_mat(c_before, c_after, data, mahalanobis_dist = False)
-
-                c_assignments, temp_match, c_matches = compute_assignment(centroid_dist, cb_labels, ca_labels)
+                assignments, prediction = compute_assignment(centroid_dist, cb_labels, ca_labels) # the assignment is given in indeces, the prediction in labels (= leaf instance numbers)
 
                 '''SCORING'''
-                true_pairs = np.intersect1d(c_before_labels[:,-1],c_after_labels[:,-1])
+                true_pairs = np.intersect1d(cb_labels[:,-1],ca_labels[:,-1])
                 total_true_pairings.append(true_pairs.shape[0])
-                pairings_calculated.append(len(c_matches))
+                pairings_calculated.append(prediction.shape[0])
 
                 # Regardless of assignments, find the distribution of cost for true vs. false edges in all cost matrices
                 true_pair_matrix = cb_labels[:,-1].reshape(-1,1) == ca_labels[:,-1]
-                #true_indeces = [np.where(c_before_labels[:,-1]==x)[0] if np.where(c_before_labels[:,-1]==x)[0].size >0 else None for x in c_after_labels[:,-1]]
-                bonn_cost_distr[0].append(centroid_dist[np.where(true_pair_matrix==True)])
-                bonn_cost_distr[1].append(centroid_dist[np.where(true_pair_matrix==False)])
+                cost_distr[0].append(centroid_dist[np.where(true_pair_matrix==True)])
+                cost_distr[1].append(centroid_dist[np.where(true_pair_matrix==False)])
 
-                if c_matches is not None:
-                    x = 0
+                if prediction is not None:
+                    print('Prediction:', prediction)
+                    # First evaluate the true positives
+                    x = np.where(prediction[:,0] == prediction [:,1])[0].shape[0] # true positives
+                    x_indeces = np.vstack((assignments[0,prediction[:,0] == prediction [:,1]], assignments[1,prediction[:,0] == prediction [:,1]])) # where those occured in the cost matrix
+                    x_dist = centroid_dist[tuple(x_indeces)] # costs of true positives
+
+                    # Then the false positives and open pairings
+                    false_indeces = np.vstack((assignments[0,prediction[:,0] != prediction [:,1]], assignments[1,prediction[:,0] != prediction [:,1]]))
+                    false_labels = prediction[prediction[:,0] != prediction [:,1]]
                     fp = 0
                     o = 0
-                    x_dist = []
                     fp_dist = []
                     o_dist = []
+                    for i,error in enumerate(false_indeces.T):
+                        if false_labels[i][0] in true_pairs ^ false_labels[i][1] in true_pairs:
+                            # This is a FALSE POSITIVE
+                            # One leaf that would have had a match was mistakenly matched to an unpaired leaf
+                            fp += 1
+                            fp_dist.append(centroid_dist[tuple(error)])
+                        elif false_labels[i][0] in true_pairs and false_labels[i][1] in true_pairs:
+                            # This is also a FALSE POSITIVE
+                            # Both leaves from an existing pair were mistakenly matched to each other
+                            fp += 1
+                            fp_dist.append(centroid_dist[tuple(error)])
+                        elif false_labels[i][0] not in true_pairs and false_labels[i][1] not in true_pairs:
+                            # This is an OPEN PAIRING
+                            # Both leaves had no true pairing, so this assignment should not affect the score
+                            o += 1
+                            o_dist.append(centroid_dist[tuple(error)])
+                        
+                    scores[0].append(x)
+                    scores[1].append(fp)
+                    scores[2].append(o)
+                    scores[3].append(x_dist)
+                    scores[4].append(fp_dist)
+                    scores[5].append(o_dist)
 
-##### WORK IN PROGRESS 
-                    
-                    
-                for method, assignment, scores, distances in zip([c_matches, o_matches, a_matches],[c_assignments, o_assignments, a_assignments],[bonn_scores, outline_scores, add_inf_scores],[centroid_dist, outline_dist, add_inf_dist]):
-                    if method is not None:
-                        x = 0
-                        fp = 0
-                        o = 0
-                        x_dist = []
-                        fp_dist = []
-                        o_dist = []
-                        #scores[3].append(method[:,:,-1])
-                        #scores[4].append(np.asarray(assignment))
-                        #scores[5].append(distances)
-                        for i,pair in enumerate(method):
-                            if pair[0,-1] == pair[1,-1]:
-                                # A true match is found
-                                x += 1
-                                x_dist.append(distances[assignment[0][i], assignment[1][i]])
-                            elif (pair[0,-1] in true_pairs) ^ (pair[1,-1] in true_pairs):
-                                # One leaf from an existing pair was mistakenly matched to an unpaired leaf
-                                fp += 1
-                                fp_dist.append(distances[assignment[0][i], assignment[1][i]])
-                            elif pair[0,-1] not in true_pairs and pair[1,-1] not in true_pairs:
-                                o += 1
-                                o_dist.append(distances[assignment[0][i], assignment[1][i]])
-                        scores[0].append(x)
-                        scores[1].append(fp)
-                        scores[2].append(o)
-                        scores[3].append(x_dist)
-                        scores[4].append(fp_dist)
-                        scores[5].append(o_dist)
+    return scores, nr_of_leaves, pairings_calculated, total_true_pairings, cost_distr
 
-    return bonn_scores, outline_scores, add_inf_scores, nr_of_leaves, pairings_calculated, total_true_pairings, bonn_cost_distr, outline_cost_distr, add_inf_cost_distr
 
-# def analyse(bonn, outline, add_inf, nr_leaves, nr_pairings, nr_true_pairings):
-#     #x, fp, o, misses
-#     results = []
-#     for method in [bonn, outline, add_inf]:
-#         if not method[0]:
-#             results.append(None)
-#         else:
-#             x = sum(method[0]) # true positives
-#             fp = sum(method[1]) # false positives
-#             open = sum(method[2]) # open pairings (type 4 error),
-#             misses = sum(nr_true_pairings) - x
-#             mean_x_dist = None
-#             mean_fp_dist = None
-#             mean_open_dist = None
-#             average_correct = np.mean(np.asarray(method[0])/np.asarray(nr_true_pairings))
+# def get_heiwolt_scores(data, labels):
+#     #TODO: Add option to remove leaves from evaluation that are only present in the after set
 
-#             if x != 0:
-#                 mean_x_dist = sum(sum(ts) for ts in method[3]) / x
-#             if fp != 0:
-#                 mean_fp_dist = sum(sum(ts) for ts in method[4]) / fp
-#             if open != 0:
-#                 mean_open_dist = sum(sum(ts) for ts in method[5]) / open
+#     scores = [[],[],[],[],[],[]] # x, fp, o, dist_x, dist_fp, dist_o
+#     nr_of_leaves = [] # how many matches were found, dictated by smaller nr of leaves at time t or t+1
+#     pairings_calculated = [] # number of pairings that were found, regardless of correctness, usually equal to the sum of the min number of leaves at each time step
+#     total_true_pairings = [] # number of true pairing that could have been found
+#     cost_distr=[[],[]]
 
-#             method_result = np.array((x, fp, open, misses, mean_x_dist, mean_fp_dist, mean_open_dist, average_correct))
-#             results.append(method_result)
+#     for plant in np.unique(labels[:,0]): # for each plant
+#         subset, sublabels = util.filter_subset(data, labels, plant_nr=plant)
+#         for time_step in np.unique(sublabels[:,2]): # and for each time step available in the processed data
+#             if time_step != np.unique(sublabels[:,2])[-1]: # stop at the last timestep, there will be no comparison to make
+#                 c_before, cb_labels = util.filter_subset(subset, sublabels, scan_nr=time_step)
+#                 c_after, ca_labels = util.filter_subset(subset, sublabels, scan_nr=time_step+1)
 
-#     return results[0], results[1], results[2]
+#                 # Count how many leaves were present in each time step
+#                 if not nr_of_leaves:
+#                     nr_of_leaves.append(c_before.shape[0])
+#                 nr_of_leaves.append(c_after.shape[0])
+
+#                 if c_after.size == 0 or c_before.size == 0:
+#                     # if any set is empty, there is no comparison to make
+#                     continue
+#                 centroid_dist = get_dist_mat(c_before, c_after, data, mahalanobis_dist = False)
+#                 assignments, prediction = compute_assignment(centroid_dist, cb_labels, ca_labels) # the assignment is given in indeces, the prediction in labels (= leaf instance numbers)
+
+#                 '''SCORING'''
+#                 true_pairs = np.intersect1d(cb_labels[:,-1],ca_labels[:,-1])
+#                 total_true_pairings.append(true_pairs.shape[0])
+#                 pairings_calculated.append(prediction.shape[0])
+
+#                 # Regardless of assignments, find the distribution of cost for true vs. false edges in all cost matrices
+#                 true_pair_matrix = cb_labels[:,-1].reshape(-1,1) == ca_labels[:,-1]
+#                 cost_distr[0].append(centroid_dist[np.where(true_pair_matrix==True)])
+#                 cost_distr[1].append(centroid_dist[np.where(true_pair_matrix==False)])
+
+#                 if prediction is not None:
+#                     print('Prediction:', prediction)
+#                     # First evaluate the true positives
+#                     x = np.where(prediction[:,0] == prediction [:,1])[0].shape[0] # true positives
+#                     x_indeces = np.vstack((assignments[0,prediction[:,0] == prediction [:,1]], assignments[1,prediction[:,0] == prediction [:,1]])) # where those occured in the cost matrix
+#                     x_dist = centroid_dist[tuple(x_indeces)] # costs of true positives
+
+#                     # Then the false positives and open pairings
+#                     false_indeces = np.vstack((assignments[0,prediction[:,0] != prediction [:,1]], assignments[1,prediction[:,0] != prediction [:,1]]))
+#                     false_labels = prediction[prediction[:,0] != prediction [:,1]]
+#                     fp = 0
+#                     o = 0
+#                     fp_dist = []
+#                     o_dist = []
+#                     for i,error in enumerate(false_indeces.T):
+#                         if false_labels[i][0] in true_pairs ^ false_labels[i][1] in true_pairs:
+#                             # This is a FALSE POSITIVE
+#                             # One leaf that would have had a match was mistakenly matched to an unpaired leaf
+#                             fp += 1
+#                             fp_dist.append(centroid_dist[tuple(error)])
+#                         elif false_labels[i][0] in true_pairs and false_labels[i][1] in true_pairs:
+#                             # This is also a FALSE POSITIVE
+#                             # Both leaves from an existing pair were mistakenly matched to each other
+#                             fp += 1
+#                             fp_dist.append(centroid_dist[tuple(error)])
+#                         elif false_labels[i][0] not in true_pairs and false_labels[i][1] not in true_pairs:
+#                             # This is an OPEN PAIRING
+#                             # Both leaves had no true pairing, so this assignment should not affect the score
+#                             o += 1
+#                             o_dist.append(centroid_dist[tuple(error)])
+                        
+#                     scores[0].append(x)
+#                     scores[1].append(fp)
+#                     scores[2].append(o)
+#                     scores[3].append(x_dist)
+#                     scores[4].append(fp_dist)
+#                     scores[5].append(o_dist)
+
+#     return scores, nr_of_leaves, pairings_calculated, total_true_pairings, cost_distr
+
+def analyse_scores(scores, nr_of_leaves, pairings_calculated, total_true_pairings):
+    #scores are x, fp, o, dist_x, dist_fp, dist_o
+    Ex = sum(scores[0]) # true positives
+    Efp = sum(scores[1]) # false positives
+    Eo = sum(scores[2]) # open pairings (type 4 error),
+    misses = sum(total_true_pairings) - Ex
+    average_overall_correct = Ex/sum(total_true_pairings) # percentage of detected correct pairings across all time steps 
+    average_correct_per_step = np.mean(np.asarray(scores[0])/np.asarray(total_true_pairings)) # average correct pairings per time step
+
+    if Ex != 0:
+        mean_x_dist = sum(sum(ts) for ts in scores[3]) / Ex # average cost associated with any correct pairing
+    if Efp != 0:
+        mean_fp_dist = sum(sum(ts) for ts in scores[4]) / Efp # average cost associated with any false positive
+    if Eo != 0:
+        mean_open_dist = sum(sum(ts) for ts in scores[5]) / Eo # average cost associated with any open pairing
+
+    results = np.array((Ex, Efp, Eo, misses, mean_x_dist, mean_fp_dist, mean_open_dist, average_overall_correct, average_correct_per_step))
+    return results

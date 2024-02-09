@@ -49,11 +49,12 @@ def plot_leaf_area_over_time(areas, labels, dates, plant_names):
 
         subset, sublabels = util.filter_subset(areas, labels=labels, plant_nr=plant, scan_nr=associated_dates)
         method = ['Zabawa', 'Minimal mesh', 'Ball pivoting', 'Delaunay']
-        for i in range(len(method)):
+        using = [0,2] # not showing MinMesh or Delaunay for now
+        for i in using:
             plt.figure()
             plt.title(f"Leaf area for plant {plant} over time")
             plt.xlabel("Scan date")
-            plt.ylabel("Leaf area")
+            plt.ylabel("Leaf area (mm\u00b2)")
             leaf_nrs = []
             for leaf in np.unique(sublabels[:,-1]):
                 leaf_set, leaf_labels = util.filter_subset(subset, sublabels, leaf_nr=leaf)
@@ -68,3 +69,45 @@ def plot_leaf_area_over_time(areas, labels, dates, plant_names):
             plt.legend(leaf_nrs)
             plt.show()
     return
+
+def plot_area_method_comparison(areas, labels, dates, plant_names):
+    # for each leaf a plot
+    # the x axis is the date
+    # the y axis is the leaf area
+    # each leaf is a different method
+    
+    all_scan_dates_A2 = ['0512','0519','0525','0531','0608']
+    all_scan_dates_B1 = ['0513','0520']
+    A2_int_dates = util.get_date_nrs(all_scan_dates_A2)
+    B1_int_dates = util.get_date_nrs(all_scan_dates_B1)
+
+    for plant in np.unique(labels[:,0]):
+        # Not all annotated scans have had their leaf identities associated over time (manually) yet.
+        if plant_names[plant] == 'A2':
+                associated_dates = np.arange(5)
+        elif plant_names[plant] == 'B1':
+                associated_dates = np.arange(2)
+
+        subset, sublabels = util.filter_subset(areas, labels=labels, plant_nr=plant, scan_nr=associated_dates)
+        for leaf in np.unique(sublabels[:,-1]):
+            leafset, leafsublabels = util.filter_subset(subset, sublabels, leaf_nr=leaf)
+            if len(leafset.shape)==1:
+                continue
+
+            plt.figure()
+            plt.title(f"Leaf area for plant {plant}, leaf {leaf} over time")
+            plt.xlabel("Scan date")
+            plt.ylabel("Leaf area (mm\u00b2)")
+
+            method = ['Zabawa', 'Minimal mesh', 'Ball pivoting', 'Delaunay']
+            using = [0,2] # not showing MinMesh or Delaunay for now
+            for i in using:
+                plt.plot(leafsublabels[:,1], leafset[:,i], 'o-')
+            if plant_names[plant] == 'A2':
+                plt.xticks(A2_int_dates, [date[2:]+'.'+date[:2] for date in all_scan_dates_A2], rotation=45, ha='right')
+            elif plant_names[plant] == 'B1':
+                plt.xticks(B1_int_dates, [date[2:]+'.'+date[:2] for date in all_scan_dates_B1], rotation=45, ha='right')
+            plt.legend(np.asarray(method)[using])
+            plt.show() 
+    return
+

@@ -25,7 +25,7 @@ def count_organs(files, save=True):
     all_organ_counts = np.asarray(all_organ_counts) # array of shape (num_scans, num_classes)
 
     if save:
-        np.savetxt('cea_paper/organ_counts.csv', all_organ_counts, delimiter=',', fmt='%d')
+        np.savetxt(os.path.join(os.path.dirname(__file__), 'organ_counts.csv'), all_organ_counts, delimiter=',', fmt='%d')
 
     return all_organ_counts
 
@@ -63,6 +63,28 @@ def leaf_area(directory):
         areas.append([z_area, min_mesh_area, bp_mesh_area, d_mesh_area])
     
     areas = np.asarray(areas)
-    np.savetxt('cea_paper/leaf_areas.csv', areas, delimiter=',')
+    np.savetxt(os.path.join(os.path.dirname(__file__), 'leaf_areas.csv'), areas, delimiter=',')
 
     return areas
+
+def biomass(files, voxel_size=3):
+    '''
+    Given a directory of annotated scans, this function will estimate the biomass of the plant by summing the number of points in the point cloud.
+    voxel_size: The size of the voxel grid used to downsample the point cloud, given in mm.
+    '''
+    class_cats = {"leaf":1, "petiole":2, "berry":3, "flower":4, "crown":5, "background":6, "other":7, "table":8, "emerging leaf":9}
+    bio_parts = [1,2,3,4,5,7,9]
+    biomass = []
+    for scan in files:
+        cloud = o3d.geometry.PointCloud()
+        data = np.loadtxt(scan, comments="//")
+        semantic_labels = data[:,-2]
+        for cat in bio_parts:
+            cloud.points.extend(o3d.utility.Vector3dVector(data[np.where(semantic_labels==cat)][:,:3]))
+
+        voxel_grid = o3d.geometry.VoxelGrid.create_from_point_cloud(cloud, voxel_size=voxel_size)
+        size = len(voxel_grid.get_voxels()) # number of occupied voxels as a proxy for volume of the plant
+        biomass.append(size)
+    biomass = np.asarray(biomass)
+    np.savetxt(os.path.join(os.path.dirname(__file__), 'plant_biomass.csv'), biomass, delimiter=',')
+    return biomass

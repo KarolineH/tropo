@@ -55,6 +55,31 @@ def get_single_bonn_prediction(before_centroids, after_centroids, before_labels,
     assignments, prediction = compute_assignment(centroid_dist, before_labels, after_labels)
     return prediction
 
+def get_bonn_predictions(data, labels):
+    nr_of_leaves = []
+    predictions = []
+    assignments = []
+    for plant in np.unique(labels[:,0]): # for each plant
+        subset, sublabels = util.filter_subset(data, labels, plant_nr=plant)
+        for time_step in np.unique(sublabels[:,2]): # and for each time step available in the processed data
+            if time_step != np.unique(sublabels[:,2])[-1]: # stop at the last timestep, there will be no comparison to make
+                c_before, cb_labels = util.filter_subset(subset, sublabels, scan_nr=time_step)
+                c_after, ca_labels = util.filter_subset(subset, sublabels, scan_nr=time_step+1)
+
+                # Count how many leaves were present in each time step
+                if not nr_of_leaves:
+                    nr_of_leaves.append(c_before.shape[0])
+                nr_of_leaves.append(c_after.shape[0])
+
+                if c_after.size == 0 or c_before.size == 0:
+                    # if any set is empty, there is no comparison to make
+                    continue
+                centroid_dist = get_dist_mat(c_before, c_after, data, mahalanobis_dist = False)
+                assignment, prediction = compute_assignment(centroid_dist, cb_labels, ca_labels) # the assignment is given in indeces, the prediction in labels (= leaf instance numbers)
+                predictions.append(prediction)
+                assignments.append(assignment)
+    return predictions, assignments, nr_of_leaves
+
 def get_bonn_scores(data, labels):
     #TODO: Add option to remove leaves from evaluation that are only present in the after set
 

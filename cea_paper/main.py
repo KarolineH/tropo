@@ -23,11 +23,11 @@ leaf_labels, __ = util.leaf_file_names_to_labels(in_dir + 'processed/aligned/')
 # cea_plotting.plot_organ_counts_over_time(counts, labels, dates, plant_names)
 
 
-# GET BIOMASS OVER TIME
+#GET BIOMASS OVER TIME
 # if os.path.exists('cea_paper/plant_biomass.csv'):
 #     biomass = np.loadtxt('cea_paper/plant_biomass.csv', delimiter=',')
 # else:
-#     biomass = pheno_extraction.biomass(files,voxel_size=2)
+#     biomass = pheno_extraction.biomass(files,voxel_size=1)
 # cea_plotting.plot_biomass_over_time(biomass, labels, dates, plant_names)
 
 # GET LEAF MATCHING OVER TIME
@@ -41,7 +41,6 @@ predictions,__,__ = leaf_matching.get_bonn_predictions(centroids,leaf_labels)
 
 
 # GET LEAF AREA OVER TIME
-#pheno_extraction.leaf_area(in_dir)
 leaf_labels, __ = util.leaf_file_names_to_labels(in_dir + 'processed/aligned/')
 if os.path.exists('cea_paper/leaf_areas.csv'):
     areas = np.loadtxt('cea_paper/leaf_areas.csv', delimiter=',')
@@ -49,11 +48,16 @@ if os.path.exists('cea_paper/leaf_areas.csv'):
 else:
     pheno_extraction.leaf_area(in_dir)
 cea_plotting.plot_leaf_area_over_time(areas, leaf_labels, dates, plant_names)
-#cea_plotting.plot_area_method_comparison(areas, leaf_labels, dates, plant_names)
+# cea_plotting.plot_area_method_comparison(areas, leaf_labels, dates, plant_names)
 
 
 # SHOW THE SAME LEAF OVER TIME
-leaf_dir = '/home/karo/ws/data/4DBerry/processed/aligned/'
-leaf_files = os.listdir(leaf_dir)
-leaf_files = sorted(leaf_files)
-cea_plotting.plot_single_leave_scans_over_time(leaf_files, leaf_labels)
+# leaf_dir = '/home/karo/ws/data/4DBerry/processed/aligned/'
+# leaf_files = os.listdir(leaf_dir)
+# leaf_files = sorted(leaf_files)
+# cea_plotting.plot_single_leave_scans_over_time(leaf_files, leaf_labels)
+
+
+# PLOT VOXEL GRID
+#cea_plotting.plot_voxel_grid(files, 8)
+# pheno_extraction.biomass_as_func_of_resolution(files)

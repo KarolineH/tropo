@@ -88,3 +88,27 @@ def biomass(files, voxel_size=3):
     biomass = np.asarray(biomass)
     np.savetxt(os.path.join(os.path.dirname(__file__), 'plant_biomass.csv'), biomass, delimiter=',')
     return biomass
+
+def biomass_as_func_of_resolution(files):
+    class_cats = {"leaf":1, "petiole":2, "berry":3, "flower":4, "crown":5, "background":6, "other":7, "table":8, "emerging leaf":9}
+    bio_parts = [1,2,3,4,5,7,9]
+    biomass = []
+    scan = files[1]
+    cloud = o3d.geometry.PointCloud()
+    data = np.loadtxt(scan, comments="//")
+    semantic_labels = data[:,-2]
+    for cat in bio_parts:
+        cloud.points.extend(o3d.utility.Vector3dVector(data[np.where(semantic_labels==cat)][:,:3]))
+
+    resolutions = np.arange(0.1, 20, 0.1)
+    biomass = []
+    for res in resolutions:
+        voxel_grid = o3d.geometry.VoxelGrid.create_from_point_cloud(cloud, voxel_size=res)
+        size = len(voxel_grid.get_voxels()) * res**3 # number of occupied voxels times voxel volume
+        biomass.append(size)
+    biomass = np.asarray(biomass)
+
+    import matplotlib.pyplot as plt
+    plt.plot(resolutions, biomass)
+    plt.show()
+    return biomass

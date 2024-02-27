@@ -142,7 +142,7 @@ def plot_leaf_area_over_time(areas, labels, dates, plant_names):
         using = [0] # not showing MinMesh or Delaunay for now
         for i in using:
             plt.figure()
-            plt.title(f"Leaf area for plant {plant} over time")
+            plt.title(f"Leaf area for plant {plant_names[plant]} over time")
             plt.xlabel("Scan date")
             plt.ylabel("Leaf area [cm\u00b2]")
             leaf_nrs = []
@@ -210,3 +210,18 @@ def plot_area_method_comparison(areas, labels, dates, plant_names):
             plt.show() 
     return
 
+def plot_voxel_grid(files, voxel_size=3):
+    bio_parts = [1,2,3,4,5,7,9]
+    for scan in files:
+        cloud = o3d.geometry.PointCloud()
+        data = np.loadtxt(scan, comments="//")
+        semantic_labels = data[:,-2]
+        for cat in bio_parts:
+            cloud.points.extend(o3d.utility.Vector3dVector(data[np.where(semantic_labels==cat)][:,:3]))
+
+        voxel_grid = o3d.geometry.VoxelGrid.create_from_point_cloud(cloud, voxel_size=voxel_size)
+        voxel_grid2 = o3d.geometry.VoxelGrid.create_from_point_cloud(cloud, voxel_size=1)
+        o3d.visualization.draw_geometries([cloud])
+        o3d.visualization.draw_geometries([voxel_grid, cloud])
+        o3d.visualization.draw_geometries([voxel_grid2, cloud])
+    return

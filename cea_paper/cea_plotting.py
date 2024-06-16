@@ -40,8 +40,9 @@ def plot_biomass_over_time(mass, labels, dates, plant_names):
     B1_int_dates = util.get_date_nrs(all_scan_dates_B1)
 
     plants = np.unique(labels[:,0])
-    plt.figure(figsize=(14, 6))
+    fig = plt.figure(figsize=(14, 6))
     #plt.title(f" for over time")
+    
     plt.xlabel("Scan date", fontsize=12)
     plt.ylabel("Estimated plant volume [cm\u00b3]", fontsize=12)
 
@@ -56,15 +57,17 @@ def plot_biomass_over_time(mass, labels, dates, plant_names):
 
     B1_int_dates = np.asarray(B1_int_dates) + 1
     xticks = np.unique(np.concatenate((np.asarray(all_scan_dates_A2), np.asarray(all_scan_dates_B1)),0))
-    plt.xticks(np.unique(np.concatenate((A2_int_dates,B1_int_dates),0)), [date[2:]+'.'+date[:2] for date in xticks], rotation=90, ha='center')
+    plt.xticks(np.unique(np.concatenate((A2_int_dates,B1_int_dates),0)), [date[2:]+'.'+date[:2] for date in xticks], rotation=90, ha='center', fontsize=13)
     line_colors = [line.get_color() for line in plt.gca().lines]
     for i, label in enumerate(plt.gca().get_xticklabels()):
         if xticks[i] in all_scan_dates_A2 and xticks[i] in all_scan_dates_B1:
             label.set_color('black')
         elif xticks[i] in all_scan_dates_A2:
             label.set_color(line_colors[0])
+            #label.set_ha('right')
         else:
             label.set_color(line_colors[1])
+            label.set_ha('left')
     plt.legend(["A2", "B1"])
     plt.subplots_adjust(bottom=0.2)
     plt.show()
